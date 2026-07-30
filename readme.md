@@ -5,12 +5,10 @@ BlackSharkLib.swift is a swift-library that enables communication between your a
 # Supported devices
 
 - Black Shark MagCooler 4 Pro
+- Black Shark MagCooler 5 Pro
 
 Other devces may work, but are not supported. if you want a device supported, please feel free to create a issue and i may look into adding support.
 Priority for adding new supported devices are based of amount of requests and donations.
-
-Confirmed not supported devices:
-- Black Shark MagCooler 5 Pro - Uses different protocol apparently. Device is bought and implementation is around the corner.
 
 # Installation
 In Xcode under Project and Package Dependencies add a new pagage and enter the following inthe Search-field:

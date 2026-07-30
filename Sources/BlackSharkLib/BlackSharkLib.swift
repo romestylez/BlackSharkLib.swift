@@ -1,159 +1,351 @@
 import Foundation
 
+/// Protocol/codec for Black Shark phone coolers (MagCooler 4 Pro and 5 Pro).
+///
+/// This library only builds the byte payloads you write to the device and parses the ones it
+/// notifies back. You would need to build the CoreBluetooth workflow yourself, or implement it in your existing CoreBluetooth code.
 public class BlackSharkLib {
-    
-    
+
+
     private static let manufacturerDataIdentifier: Data = Data([0x8F, 0x03])
+    /// Returns `true` if the advertised manufacturer data belongs to a Black Shark cooler.
     public static func isBlackSharkDevice(_ manufacturerData: Data) -> Bool {
         return manufacturerData.starts(with: manufacturerDataIdentifier)
     }
 
     private static let serviceUUID: UUID = UUID(uuidString: "0000A0A0-3C17-D293-8E48-14FE2E4DA212")!
+    /// The GATT service to connect to. Same on both models.
     public static func getServiceUUID() -> UUID {
         return BlackSharkLib.serviceUUID
     }
-   
-    //
-    // Read
-    //
-    private static let readCharacteristicsUUID   = Data([0xA0, 0x02])
-    
+
+    /// The cooler model, which the caller detects and passes back in.
+    ///
+    /// The 4 Pro and the 5 Pro share a PCB (`BR42`), the service UUID, both characteristics
+    /// and the `05`-command family. What differs is firmware-level: the telemetry frame, the
+    /// status-poll parameter and the whole light system. Everything
+    /// 5 Pro-specific in this library is opt-in, so existing 4 Pro code keeps working untouched.
+    public enum Model: Sendable, Equatable, CaseIterable {
+        /// Black Shark MagCooler 4 Pro.
+        case pro4
+        /// Black Shark MagCooler 5 Pro.
+        case pro5
+    }
+
+    /// Identifies which cooler you are talking to, from its advertised name.
+    ///
+    /// - Parameter advertisedName: The **Complete Local Name from the advertising packet**. On
+    ///   iOS that means `advertisementData[CBAdvertisementDataLocalNameKey]` in the discovery
+    ///   callback, captured while scanning.
+    /// - Returns: The model, or `nil` if the name is missing or names a cooler this library
+    ///   does not know.
+    ///
+    /// - Important: Do **not** pass `peripheral.name`. That is the GAP device name, which
+    ///   CoreBluetooth caches and which these coolers set to a truncated version of the full name. effectively
+    ///   removing the last part where the model is which is the important part.
+    public static func detectModel(advertisedName: String? = nil) -> Model? {
+        if let name = advertisedName?.lowercased() {
+            if name.contains("5pro") {
+                return .pro5
+            }
+            if name.contains("4pro") {
+                return .pro4
+            }
+        }
+
+        return nil
+    }
+
     public protocol Message {
         var rawData: Data { get }
     }
-    
+
     public struct CoolingState: Message {
+        /// The frame exactly as it came off the wire.
         public let rawData: Data
+        /// The model of the cooler
+        public let model: Model
+        /// Cold-side (phone-facing) temperature in °C. Signed.
         public let phoneTemperature: Int
+        /// Hot-side / exhaust temperature in °C. Signed.
         public let heatsinkTemperature: Int
+        /// Fan speed in RPM.
+        public let fanRPM: Int?
+        /// Device power level.
+        public let powerLevel: Int?
     }
-    
+
     public struct FanState: Message {
+        /// The frame exactly as it came off the wire.
         public let rawData: Data
-        public let speed: Int // 0-100%
+        /// The model of the cooler (Identified by message-payload format)
+        public let model: Model? = nil
+        /// 0-100%.
+        public let speed: Int
     }
-    
+
     public struct UnknownMessage: Message {
+        /// The frame exactly as it came off the wire.
         public let rawData: Data
     }
-    
+
+    private static let readCharacteristicsUUID   = Data([0xA0, 0x02])
+    /// The characteristic that notifies status frames. Subscribe to it and feed what
+    /// arrives to ``parseMessages(_:)``. Same on both models.
     public static func getReadCharacteristicsUUID() -> Data {
         // Only one known characteristic for now
         return BlackSharkLib.readCharacteristicsUUID
     }
-    
+
+    /// Decodes a frame received on the read characteristic.
+    ///
+    /// Recognises the fan report (``FanState``) and the telemetry frame of either model
+    /// (``CoolingState``). Anything else, including malformed or truncated
+    /// frames, comes back as ``UnknownMessage`` with `rawData` intact, so nothing is ever lost.
     public static func parseMessages(_ data: Data) -> Message {
-        guard data.count > 2 else {
+        // Read through a plain byte array so the offsets below are relative to the start of
+        // the frame. A Data slice keeps the indices of the buffer it was cut from, so parsing
+        // something like buffer.dropFirst(2) would trap on bytes[0] even though the frame
+        // itself is intact. rawData keeps the Data exactly as it was handed to us.
+        let bytes = [UInt8](data)
+
+        guard bytes.count > 2 else {
             return UnknownMessage(rawData: data)
         }
-        // data[0] is a split. First part of hex is always 8, second half is the lengthbit.
-        // data[1-2] is the command (that it responds to)
-        // data[3] is a spacer(?) seems to always be 0x00
-        
+        // bytes[0] is a split. First part of hex is always 8, second half is the lengthbit.
+        // bytes[1-2] is the command (that it responds to)
+        // bytes[3] is a spacer(?) seems to always be 0x00
+
         // 02 10 - Fan status
-        if data[1] == 0x02 && data[2] == 0x10 {
-            guard data.count > 4 else {
+        if bytes[1] == 0x02 && bytes[2] == 0x10 {
+            guard bytes.count > 4 else {
                 return UnknownMessage(rawData: data)
             }
-            // Fan speed is either data[4] or data[5]
+            // Fan speed is either bytes[4] or bytes[5]
             // Both are identical. I suspect one of them are the cooling value, but i dont know how to adjust them independently yet.
-            let speed = max(0, min(100, 100 - Int(data[4])))
+            let speed = max(0, min(100, 100 - Int(bytes[4])))
 
             return FanState(rawData: data, speed: speed)
         }
-        
+
         // 06 00 - Cooling status
-        if data[1] == 0x06 && data[2] == 0x00 {
-            guard data.count > 7 else {
+        if bytes[1] == 0x06 && bytes[2] == 0x00 {
+            guard bytes.count > 7 else {
                 return UnknownMessage(rawData: data)
             }
-            // data[5] - Temperature on the Phone side
-            let phoneTemperature = Int(Int8(bitPattern: UInt8(data[5])))
-            
-            // data[7] - Temperature on the heatsink
-            let heatsinkTemperature = Int(Int8(bitPattern: UInt8(data[7])))
-            
-            return CoolingState(rawData: data, phoneTemperature: phoneTemperature, heatsinkTemperature: heatsinkTemperature)
+            // bytes[5] - Temperature on the Phone side
+            let phoneTemperature = Int(Int8(bitPattern: bytes[5]))
+
+            // bytes[7] - Temperature on the heatsink
+            let heatsinkTemperature = Int(Int8(bitPattern: bytes[7]))
+
+            // A 4 Pro reports neither fan RPM nor power level.
+            return CoolingState(rawData: data,
+                model: .pro4,
+                phoneTemperature: phoneTemperature,
+                heatsinkTemperature: heatsinkTemperature,
+                fanRPM: nil,
+                powerLevel: nil
+            )
         }
-        
+
+        // 89 06 - Cooling status (MagCooler 5 Pro)
+        // The 5 Pro answers the status poll with its own 9-byte frame.
+        // 89 06 20 00 <cold> <hot> <rpm-lo> <rpm-hi> <power>
+        //  0  1  2  3    4     5      6        7        8
+        if bytes[0] == 0x89 && bytes[1] == 0x06 {
+            guard bytes.count > 8 else {
+                return UnknownMessage(rawData: data)
+            }
+            // bytes[4] - Temperature on the Phone side (cold side of the Peltier plate)
+            let phoneTemperature = Int(Int8(bitPattern: bytes[4]))
+
+            // bytes[5] - Temperature on the heatsink (hot side / exhaust)
+            let heatsinkTemperature = Int(Int8(bitPattern: bytes[5]))
+
+            // bytes[6-7] - Fan speed in RPM, little-endian UInt16. (58 11 = 4440 rpm)
+            let fanRPM = Int(bytes[6]) | (Int(bytes[7]) << 8)
+
+            // bytes[8] - Power level
+            let powerLevel = Int(bytes[8])
+
+            return CoolingState(
+                rawData: data,
+                model: .pro5,
+                phoneTemperature: phoneTemperature,
+                heatsinkTemperature: heatsinkTemperature,
+                fanRPM: fanRPM,
+                powerLevel: powerLevel
+            )
+        }
+
         // Return generig message
         return UnknownMessage(rawData: data)
     }
-    
-    
-    //	
+
+
+    //
     // Write
     //
     private static let writeCharacteristicsUUID  = Data([0xA0, 0x01])
-    
+    /// The characteristic every command is written to (write-without-response).
+    /// Same on both models.
     public static func getWriteCharacteristicsUUID() -> Data {
         // Only one known characteristic for now
         return BlackSharkLib.writeCharacteristicsUUID
     }
-    
-    public static func getCoolingMetadataCommand() -> Data {
-        // Makes the read-channel return metadata about the cooling. (Temp, etc)
-        return Data([0x05, 0x06, 0x00, 0x00, 0x00])
+
+    /// Makes the read-channel return metadata about the cooling. (Temp, etc)
+    ///
+    /// This needs to be polled as the coolers dont send events. Reccomended: 2 seconds intervals.
+    public static func getCoolingMetadataCommand(model: Model = .pro4) -> Data {
+        switch model {
+        case .pro4:
+            return Data([0x05, 0x06, 0x00, 0x00, 0x00])
+        case .pro5:
+            return Data([0x05, 0x06, 0x20, 0x00, 0x00])
+        }
     }
-    
-    public static func getEnableSmartModeCommand() -> Data {
-        // Sets the load-value to special mode 250.
-        // This mode attempts to balance cooling with exhaust air temperature,
-        // making it "cooler" on the hands to cool the device down.
-        // Cooling will be slower, but if you are holding the hands close to the exhaust this may be the
-        // most comfortable aproach.
-        return Data([0x05, 0x02, 0x00, 0x00, 0xfa])
-    }
-    
-    public static func getSetFanSpeedCommand(_ percentage: Int) -> Data? {
-                
+
+    /// Sets the fan speed.
+    ///
+    /// **4 Pro only.**
+    public static func getSetFanSpeedCommand(_ percentage: Int, model: Model = .pro4) -> Data? {
+
+        guard model == .pro4 else {
+            print("ERROR: Fan speed is not controllable on a 5 Pro. Use getSetCustomModeCommand.")
+            return nil
+        }
+
         guard percentage >= 0 && percentage <= 100 else {
             print("ERROR: Invalid percentage value. Must be between 0 and 100")
             return nil
         }
-        
+
         // Convert to hex value
         var hexVal = UInt8(100 - percentage) // Value needs to be inverted.
-        
+
         if percentage == 0 {
             // Off is apparently a custom value
             hexVal = 0xfb
         }
-        
+
         return Data([0x05, 0x02, 0x00, 0x00, hexVal])
     }
-    
-    public static func getSetCoolingPowerCommand(_ percentage: Int) -> Data? {
-        
+
+    /// Sets the cooling (Peltier) power as a percentage.
+    ///
+    /// **4 Pro only.**
+    public static func getSetCoolingPowerCommand(_ percentage: Int, model: Model = .pro4) -> Data? {
+
+        guard model == .pro4 else {
+            print("ERROR: A 5 Pro takes an intensity, not a percentage. Use getSetCustomModeCommand.")
+            return nil
+        }
+
         guard percentage >= 0 && percentage <= 100 else {
             print("ERROR: Invalid percentage value. Must be between 0 and 100")
             return nil
         }
-        
+
         // Convert to hex value
         var hexVal = UInt8(100 - percentage) // Value needs to be inverted.
-        
+
         if percentage == 0 {
             // Off is apparently a custom value
             hexVal = 0xfb
         }
-        
+
         return Data([0x05, 0x05, 0x00, 0x00, hexVal])
     }
-    
-    public static func getSetLEDColorCommand(_ red: Int, _ green: Int, _ blue: Int, brightness: Int) -> Data? {
+
+    /// Selects Custom mode at one of its five intensity steps.
+    ///
+    /// **5 Pro only.** This is that cooler's single cooling control: it has no percentage
+    /// channel, and its fan is not separately settable but follows whichever step you pick.
+    ///
+    /// | intensity | power | fan   |
+    /// |-----------|-------|-------|
+    /// | 1         | 19 W  | 3360  |
+    /// | 2         | 22 W  | 4000  |
+    /// | 3         | 26 W  | 4770  |
+    /// | 4         | ~30 W | ~4950 |
+    /// | 5         | 35 W  | 5100  |
+    ///
+    /// Note that step 1 is a floor, not an off: it still draws about 19 W with the fan turning.
+    /// To actually stop cooling use ``getSetCoolingEnabledCommand(_:model:)``.
+    ///
+    /// - Parameters:
+    ///   - intensity: 1-5.
+    ///   - model: The connected cooler.
+    /// - Returns: The payload, or `nil` if `intensity` is outside 1-5, or on a 4 Pro.
+    public static func getSetCustomModeCommand(intensity: Int, model: Model = .pro4) -> Data? {
+        guard model == .pro5 else {
+            print("ERROR: Custom mode is only supported on the 5 Pro")
+            return nil
+        }
+
+        guard intensity >= 1 && intensity <= 5 else {
+            print("ERROR: Invalid intensity. Must be between 1 and 5")
+            return nil
+        }
+
+        return Data([0x06, 0x05, 0x00, 0x00, 0x04, UInt8(intensity)])
+    }
+
+    /// Switches cooling on or off while leaving the fan running, the cooler's "desk mode".
+    ///
+    /// **5 Pro only.** This is a separate channel from the intensity, which is why no intensity
+    /// step ever reaches zero: the slider sets *how hard* to cool, this sets *whether* to. On a
+    /// 4 Pro use `getSetCoolingPowerCommand(0)` instead, and set a fan speed to keep air moving.
+    ///
+    /// - Parameters:
+    ///   - enabled: `true` for normal cooling, `false` to stop cooling and leave the fan on.
+    ///   - model: The connected cooler.
+    /// - Returns: The payload, or `nil` on a 4 Pro.
+    public static func getSetCoolingEnabledCommand(_ enabled: Bool, model: Model = .pro4) -> Data? {
+        guard model == .pro5 else {
+            print("ERROR: Switching cooling separately is only supported on the 5 Pro")
+            return nil
+        }
+
+        // 01 engages desk mode, which is cooling off. 00 returns to normal cooling.
+        return Data([0x05, 0x07, 0x00, 0x00, enabled ? 0x00 : 0x01])
+    }
+
+    /// Sets a solid LED colour.
+    ///
+    /// The two models use completely different light commands: the 4 Pro takes a 47-byte `2f`
+    /// frame, the 5 Pro a 16-byte `10` frame (its Standard / Steady-Glow mode). Both are built
+    /// from the same arguments, so only `model` changes at the call site.
+    ///
+    /// - Parameters:
+    ///   - red: 0-255.
+    ///   - green: 0-255.
+    ///   - blue: 0-255.
+    ///   - brightness: 0-100. Applied by weighting the colours towards black, since neither
+    ///     device has a separate brightness field in these frames.
+    ///   - model: The connected cooler.
+    /// - Returns: The payload, or `nil` if `brightness` is outside 0-100. Colour components
+    ///   outside 0-255 are clamped into range rather than rejected.
+    public static func getSetLEDColorCommand(_ red: Int, _ green: Int, _ blue: Int, brightness: Int, model: Model = .pro4) -> Data? {
         guard brightness >= 0 && brightness <= 100 else {
             print("ERROR: Invalid brightness value. Must be between 0 and 100")
             return nil
         }
 
-        // We are putting a weight on the colors to simulate brightness
-        let scale = Double(brightness) / 100.0
-        let r = UInt8(Double(red) * scale)
-        let g = UInt8(Double(green) * scale)
-        let b = UInt8(Double(blue) * scale)
-        
-        
+        // We are putting a weight on the colors to simulate brightness.
+        let color = LEDColor(red: red, green: green, blue: blue).scaled(brightness: brightness)
+
+        if model == .pro5 {
+            return pro5SolidColorFrame(color)
+        }
+
+        let r = color.red
+        let g = color.green
+        let b = color.blue
+
+
         let payload = Data([
             0x2f, 0x01, 0x20, 0x00,
             0x06, // Mode
@@ -165,11 +357,16 @@ public class BlackSharkLib {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00
         ])
-        
+
         return payload
     }
-    
-    public static func getTurnOffLEDCommand() -> Data {
+
+    /// Turns the LEDs off.
+    public static func getTurnOffLEDCommand(model: Model = .pro4) -> Data {
+        if model == .pro5 {
+            return pro5SolidColorFrame(LEDColor(red: 0, green: 0, blue: 0))
+        }
+
         return Data([
             0x2f, 0x01, 0x20, 0x00,
             0x01, // Mode
@@ -183,7 +380,41 @@ public class BlackSharkLib {
         ])
     }
 
-    
+    private static func pro5SolidColorFrame(_ color: LEDColor) -> Data {
+        return Data([
+            0x10, 0x01, 0x10, 0x00,
+            0x00, 0x09, 0xff, 0x00,
+            0x64, // constant in every capture, possibly brightness
+            0x01,
+            color.red, color.green, color.blue,
+            0x00, 0x00, 0x00
+        ])
+    }
+
+    struct LEDColor: Sendable, Equatable {
+        let red: UInt8
+        let green: UInt8
+        let blue: UInt8
+
+        // Clamps each component to 0-255.
+        init(red: Int, green: Int, blue: Int) {
+            self.red = UInt8(max(0, min(255, red)))
+            self.green = UInt8(max(0, min(255, green)))
+            self.blue = UInt8(max(0, min(255, blue)))
+        }
+
+        // Scales the colour towards black to approximate a brightness level (0-100), the same
+        // way getSetLEDColorCommand does it for the 4 Pro.
+        func scaled(brightness: Int) -> LEDColor {
+            let scale = Double(max(0, min(100, brightness))) / 100.0
+            return LEDColor(
+                red: Int(Double(red) * scale),
+                green: Int(Double(green) * scale),
+                blue: Int(Double(blue) * scale)
+            )
+        }
+    }
+
 }
 
 extension Data {
