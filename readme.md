@@ -64,8 +64,8 @@ Contributions, protocol findings and pull requests are always welcome.
 
 The following apps are known to use this library:
 
-- [pocketChat](https://github.com/romestylez/pocketChat-ios) – Cross-platform streaming chat with integrated Black Shark cooler controls.
-- [pocketSRT](https://github.com/romestylez/pocketSRT-dev) – Mobile SRT streaming with integrated Black Shark cooler controls.
+- [pocketChat](https://github.com/romestylez/pocketChat) – Cross-platform streaming chat with integrated Black Shark cooler controls.
+- [pocketSRT](https://github.com/romestylez/pocketSRT) – Mobile SRT streaming with integrated Black Shark cooler controls.
 - [Moblin](https://github.com/eerimoq/moblin) – Automatically adjusts lighting, fan speed and cooling power based on device metrics to keep the cooler as quiet as possible during live broadcasts.
 
 Is your app using BlackSharkLib.swift? Feel free to open an issue or pull request to have it added to this list.
