@@ -36,6 +36,9 @@ struct ModelDetectionTests {
         #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCooler 5pro") == .pro5)
         #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCooler 4pro") == .pro4)
         #expect(BlackSharkLib.detectModel(advertisedName: "BLACK SHARK MAGCOOLER 5PRO") == .pro5)
+        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark FunCooler 6") == .funCooler6)
+        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark Fun Cooler 6") == .funCooler6)
+        #expect(BlackSharkLib.detectModel(advertisedName: "BR62") == .funCooler6)
     }
 
     @Test func unknownOrMissingNameReturnsNil() {
@@ -44,6 +47,7 @@ struct ModelDetectionTests {
         #expect(BlackSharkLib.detectModel() == nil)
         #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCool") == nil)
         #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCooler 6pro") == nil)
+        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark FunCooler 6 Pro") == nil)
     }
 }
 
@@ -319,6 +323,35 @@ struct FiveProCommandTests {
             0x00, 0x00, 0x00,
             0x00, 0x00, 0x00,
         ]))
+    }
+}
+
+@Suite("Commands: FunCooler 6")
+struct FunCooler6CommandTests {
+
+    @Test func coolingModesAndPowerOff() {
+        #expect(BlackSharkLib.getSetFunCooler6CoolingCommand(true, mode: .normal)
+            == Data([0x06, 0x05, 0x00, 0x00, 0x02, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6CoolingCommand(true, mode: .silent)
+            == Data([0x06, 0x05, 0x00, 0x00, 0x03, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6CoolingCommand(false, mode: .normal)
+            == Data([0x06, 0x05, 0x00, 0x00, 0xfb, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6CoolingCommand(false, mode: .silent)
+            == Data([0x06, 0x05, 0x00, 0x00, 0xfb, 0x00]))
+    }
+
+    @Test func ledCommands() {
+        #expect(BlackSharkLib.getSetFunCooler6LEDCommand(true)
+            == Data([0x05, 0x01, 0x00, 0x00, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6LEDCommand(false)
+            == Data([0x05, 0x01, 0x00, 0x00, 0x03]))
+        #expect(BlackSharkLib.getTurnOffLEDCommand(model: .funCooler6)
+            == BlackSharkLib.getSetFunCooler6LEDCommand(false))
+    }
+
+    @Test func customColoursAreRejected() {
+        #expect(BlackSharkLib.getSetLEDColorCommand(
+            0x4d, 0xff, 0x0c, brightness: 100, model: .funCooler6) == nil)
     }
 }
 

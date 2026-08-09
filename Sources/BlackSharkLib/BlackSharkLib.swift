@@ -1,6 +1,6 @@
 import Foundation
 
-/// Protocol/codec for Black Shark phone coolers (MagCooler 4 Pro and 5 Pro).
+/// Protocol/codec for supported Black Shark phone coolers.
 ///
 /// This library only builds the byte payloads you write to the device and parses the ones it
 /// notifies back. You would need to build the CoreBluetooth workflow yourself, or implement it in your existing CoreBluetooth code.
@@ -30,6 +30,8 @@ public class BlackSharkLib {
         case pro4
         /// Black Shark MagCooler 5 Pro.
         case pro5
+        /// Black Shark FunCooler 6 (BR62), not the FunCooler 6 Pro.
+        case funCooler6
     }
 
     /// Cooling presets exposed by the Black Shark app for the MagCooler 4 Pro.
@@ -37,6 +39,12 @@ public class BlackSharkLib {
         case mute
         case overclocking
         case smart
+    }
+
+    /// Cooling modes supported by the regular FunCooler 6 (BR62).
+    public enum FunCooler6CoolingMode: Sendable, Equatable, CaseIterable {
+        case normal
+        case silent
     }
 
     /// Identifies which cooler you are talking to, from its advertised name.
@@ -52,6 +60,13 @@ public class BlackSharkLib {
     ///   removing the last part where the model is which is the important part.
     public static func detectModel(advertisedName: String? = nil) -> Model? {
         if let name = advertisedName?.lowercased() {
+            let compactName = name.replacingOccurrences(of: " ", with: "")
+            if compactName.contains("funcooler6pro") || compactName.contains("magcooler6pro") {
+                return nil
+            }
+            if compactName.contains("funcooler6") || compactName.contains("magcooler6") || compactName.contains("br62") {
+                return .funCooler6
+            }
             if name.contains("5pro") {
                 return .pro5
             }
@@ -211,6 +226,10 @@ public class BlackSharkLib {
             return Data([0x05, 0x06, 0x00, 0x00, 0x00])
         case .pro5:
             return Data([0x05, 0x06, 0x20, 0x00, 0x00])
+        case .funCooler6:
+            // No FunCooler 6 telemetry frame has been verified yet. Keep the common
+            // status request available so clients do not need a separate scan path.
+            return Data([0x05, 0x06, 0x00, 0x00, 0x00])
         }
     }
 
@@ -303,6 +322,36 @@ public class BlackSharkLib {
         ]
     }
 
+    /// Builds the cooling command for the regular FunCooler 6 (BR62).
+    ///
+    /// Normal, Silent and cooling-off were captured and verified on physical hardware.
+    /// The FunCooler 6 uses one command for the complete cooling system; fan and Peltier
+    /// are not exposed as separate controls.
+    public static func getSetFunCooler6CoolingCommand(
+        _ enabled: Bool,
+        mode: FunCooler6CoolingMode = .normal
+    ) -> Data {
+        let value: UInt8
+        if !enabled {
+            value = 0xfb
+        } else {
+            switch mode {
+            case .normal:
+                value = 0x02
+            case .silent:
+                value = 0x03
+            }
+        }
+        return Data([0x06, 0x05, 0x00, 0x00, value, 0x00])
+    }
+
+    /// Enables or disables the LEDs on the regular FunCooler 6 (BR62).
+    ///
+    /// Both payloads were captured and verified on physical hardware.
+    public static func getSetFunCooler6LEDCommand(_ enabled: Bool) -> Data {
+        return Data([0x05, 0x01, 0x00, 0x00, enabled ? 0x00 : 0x03])
+    }
+
     /// Selects Custom mode at one of its five intensity steps.
     ///
     /// **5 Pro only.** This is that cooler's single cooling control: it has no percentage
@@ -385,6 +434,11 @@ public class BlackSharkLib {
             return pro5SolidColorFrame(color)
         }
 
+        guard model == .pro4 else {
+            print("ERROR: Custom LED colours are not supported on the FunCooler 6")
+            return nil
+        }
+
         let r = color.red
         let g = color.green
         let b = color.blue
@@ -409,6 +463,9 @@ public class BlackSharkLib {
     public static func getTurnOffLEDCommand(model: Model = .pro4) -> Data {
         if model == .pro5 {
             return pro5SolidColorFrame(LEDColor(red: 0, green: 0, blue: 0))
+        }
+        if model == .funCooler6 {
+            return getSetFunCooler6LEDCommand(false)
         }
 
         return Data([
