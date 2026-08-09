@@ -212,6 +212,19 @@ struct FourProCommandTests {
         #expect(BlackSharkLib.getSetCoolingPowerCommand(101) == nil)
     }
 
+    @Test(arguments: [
+        (BlackSharkLib.Pro4CoolingMode.mute, UInt8(0x2d), UInt8(0x60)),
+        (BlackSharkLib.Pro4CoolingMode.overclocking, UInt8(0x14), UInt8(0x06)),
+        (BlackSharkLib.Pro4CoolingMode.smart, UInt8(0xfa), UInt8(0xfa)),
+    ])
+    func coolingModes(mode: BlackSharkLib.Pro4CoolingMode, fanValue: UInt8, coolingValue: UInt8) throws {
+        let commands = try #require(BlackSharkLib.getSetCoolingModeCommands(mode))
+        #expect(commands == [
+            Data([0x05, 0x02, 0x00, 0x00, fanValue]),
+            Data([0x05, 0x05, 0x00, 0x00, coolingValue]),
+        ])
+    }
+
     @Test func ledColor() {
         let payload = BlackSharkLib.getSetLEDColorCommand(0x4D, 0xFF, 0x0C, brightness: 100)
         #expect(payload == Data([
@@ -239,6 +252,20 @@ struct FourProCommandTests {
             0x00, 0x00, 0x00,
         ] + [UInt8](repeating: 0x00, count: 33)))
         #expect(payload.count == 47)
+    }
+
+    @Test func streamerLED() throws {
+        let payload = try #require(BlackSharkLib.getSetLEDStreamerCommand())
+        var expected = [UInt8](repeating: 0x00, count: 47)
+        expected[0] = 0x2f
+        expected[1] = 0x01
+        expected[2] = 0x20
+        expected[4] = 0x02
+        expected[6] = 0xff
+        expected[7] = 0xff
+        expected[8] = 0x10
+        expected[9] = 0x0e
+        #expect(payload == Data(expected))
     }
 }
 
@@ -314,6 +341,8 @@ struct ModelGatingTests {
     @Test func fourProOnlyCommandsRejectFivePro() {
         #expect(BlackSharkLib.getSetFanSpeedCommand(50, model: .pro5) == nil)
         #expect(BlackSharkLib.getSetCoolingPowerCommand(50, model: .pro5) == nil)
+        #expect(BlackSharkLib.getSetCoolingModeCommands(.smart, model: .pro5) == nil)
+        #expect(BlackSharkLib.getSetLEDStreamerCommand(model: .pro5) == nil)
     }
 
     @Test func fiveProOnlyCommandsRejectFourPro() {
