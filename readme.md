@@ -6,9 +6,14 @@ BlackSharkLib.swift is a swift-library that enables communication between your a
 
 - Black Shark MagCooler 4 Pro
 - Black Shark MagCooler 5 Pro
+- Black Shark FunCooler 6 (BR62, regular model without display)
 
 The MagCooler 4 Pro implementation includes hardware-verified Mute, Overclocking and Smart
 cooling presets as well as the Streamer lighting effect.
+
+The FunCooler 6 implementation includes hardware-verified Normal and Silent cooling modes,
+complete cooling on/off control, and LED on/off control. The FunCooler 6 Pro is a different
+device and is not currently supported.
 
 Other devces may work, but are not supported. if you want a device supported, please feel free to create a issue and i may look into adding support.
 Priority for adding new supported devices are based of amount of requests and donations.
