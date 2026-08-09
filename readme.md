@@ -7,6 +7,9 @@ BlackSharkLib.swift is a swift-library that enables communication between your a
 - Black Shark MagCooler 4 Pro
 - Black Shark MagCooler 5 Pro
 
+The MagCooler 4 Pro implementation includes hardware-verified Mute, Overclocking and Smart
+cooling presets as well as the Streamer lighting effect.
+
 Other devces may work, but are not supported. if you want a device supported, please feel free to create a issue and i may look into adding support.
 Priority for adding new supported devices are based of amount of requests and donations.
 

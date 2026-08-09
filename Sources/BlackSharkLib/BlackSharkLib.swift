@@ -32,6 +32,13 @@ public class BlackSharkLib {
         case pro5
     }
 
+    /// Cooling presets exposed by the Black Shark app for the MagCooler 4 Pro.
+    public enum Pro4CoolingMode: Sendable, Equatable, CaseIterable {
+        case mute
+        case overclocking
+        case smart
+    }
+
     /// Identifies which cooler you are talking to, from its advertised name.
     ///
     /// - Parameter advertisedName: The **Complete Local Name from the advertising packet**. On
@@ -259,6 +266,43 @@ public class BlackSharkLib {
         return Data([0x05, 0x05, 0x00, 0x00, hexVal])
     }
 
+    /// Selects one of the MagCooler 4 Pro cooling presets from the Black Shark app.
+    ///
+    /// The returned fan command must be written first, followed by the cooling command.
+    /// These payloads were captured and verified on physical MagCooler 4 Pro hardware.
+    /// Smart mode uses the device-specific value `fa`, which cannot be produced by the
+    /// percentage-based command builders.
+    ///
+    /// - Parameters:
+    ///   - mode: Mute, Overclocking or Smart.
+    ///   - model: The connected cooler.
+    /// - Returns: Two ordered payloads, or `nil` for devices other than the 4 Pro.
+    public static func getSetCoolingModeCommands(_ mode: Pro4CoolingMode, model: Model = .pro4) -> [Data]? {
+        guard model == .pro4 else {
+            print("ERROR: Cooling presets are only supported on the 4 Pro")
+            return nil
+        }
+
+        let fanValue: UInt8
+        let coolingValue: UInt8
+        switch mode {
+        case .mute:
+            fanValue = 0x2d
+            coolingValue = 0x60
+        case .overclocking:
+            fanValue = 0x14
+            coolingValue = 0x06
+        case .smart:
+            fanValue = 0xfa
+            coolingValue = 0xfa
+        }
+
+        return [
+            Data([0x05, 0x02, 0x00, 0x00, fanValue]),
+            Data([0x05, 0x05, 0x00, 0x00, coolingValue]),
+        ]
+    }
+
     /// Selects Custom mode at one of its five intensity steps.
     ///
     /// **5 Pro only.** This is that cooler's single cooling control: it has no percentage
@@ -378,6 +422,28 @@ public class BlackSharkLib {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00
         ])
+    }
+
+    /// Enables the MagCooler 4 Pro Streamer lighting effect.
+    ///
+    /// This payload was captured and verified on physical MagCooler 4 Pro hardware.
+    /// - Returns: The Streamer payload, or `nil` for devices other than the 4 Pro.
+    public static func getSetLEDStreamerCommand(model: Model = .pro4) -> Data? {
+        guard model == .pro4 else {
+            print("ERROR: The Streamer lighting effect is only supported on the 4 Pro")
+            return nil
+        }
+
+        var payload = [UInt8](repeating: 0x00, count: 47)
+        payload[0] = 0x2f
+        payload[1] = 0x01
+        payload[2] = 0x20
+        payload[4] = 0x02
+        payload[6] = 0xff
+        payload[7] = 0xff
+        payload[8] = 0x10
+        payload[9] = 0x0e
+        return Data(payload)
     }
 
     private static func pro5SolidColorFrame(_ color: LEDColor) -> Data {
