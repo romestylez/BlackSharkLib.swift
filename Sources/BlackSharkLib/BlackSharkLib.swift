@@ -93,8 +93,14 @@ public class BlackSharkLib {
         public let heatsinkTemperature: Int
         /// Fan speed in RPM.
         public let fanRPM: Int?
-        /// Device power level.
+        /// Device power reported by the cooler, in watts.
+        ///
+        /// The name is retained for source compatibility. New code may use
+        /// ``devicePowerWatts`` for the same value.
         public let powerLevel: Int?
+
+        /// Device power reported by the cooler, in watts.
+        public var devicePowerWatts: Int? { powerLevel }
     }
 
     public struct FanState: Message {
@@ -175,7 +181,7 @@ public class BlackSharkLib {
         // The 5 Pro answers the status poll with its own 9-byte frame.
         // 89 06 20 00 <cold> <hot> <rpm-lo> <rpm-hi> <power>
         //  0  1  2  3    4     5      6        7        8
-        if bytes[0] == 0x89 && bytes[1] == 0x06 {
+        if bytes.count > 3 && bytes[0] == 0x89 && bytes[1] == 0x06 && bytes[2] == 0x20 && bytes[3] == 0x00 {
             guard bytes.count > 8 else {
                 return UnknownMessage(rawData: data)
             }
@@ -188,7 +194,7 @@ public class BlackSharkLib {
             // bytes[6-7] - Fan speed in RPM, little-endian UInt16. (58 11 = 4440 rpm)
             let fanRPM = Int(bytes[6]) | (Int(bytes[7]) << 8)
 
-            // bytes[8] - Power level
+            // bytes[8] - Device power in watts, matching Shark Arsenal's Device Power value
             let powerLevel = Int(bytes[8])
 
             return CoolingState(
@@ -357,16 +363,12 @@ public class BlackSharkLib {
     /// **5 Pro only.** This is that cooler's single cooling control: it has no percentage
     /// channel, and its fan is not separately settable but follows whichever step you pick.
     ///
-    /// | intensity | power | fan   |
-    /// |-----------|-------|-------|
-    /// | 1         | 19 W  | 3360  |
-    /// | 2         | 22 W  | 4000  |
-    /// | 3         | 26 W  | 4770  |
-    /// | 4         | ~30 W | ~4950 |
-    /// | 5         | 35 W  | 5100  |
+    /// The intensity is a controller setting, not a fixed RPM or watt value. Hardware captures
+    /// showed Custom Low around 3780-3810 RPM and Custom High around 5820-5940 RPM while the
+    /// reported device power remained at 8 W. Temperatures and controller state affect the
+    /// live telemetry, so clients should poll it instead of assigning fixed values to a step.
     ///
-    /// Note that step 1 is a floor, not an off: it still draws about 19 W with the fan turning.
-    /// To actually stop cooling use ``getSetCoolingEnabledCommand(_:model:)``.
+    /// Note that step 1 is a floor, not an off: the fan and Peltier remain active.
     ///
     /// - Parameters:
     ///   - intensity: 1-5.
@@ -386,14 +388,15 @@ public class BlackSharkLib {
         return Data([0x06, 0x05, 0x00, 0x00, 0x04, UInt8(intensity)])
     }
 
-    /// Switches cooling on or off while leaving the fan running, the cooler's "desk mode".
+    /// Enables or disables the cooler's "desk mode" while leaving the fan running.
     ///
     /// **5 Pro only.** This is a separate channel from the intensity, which is why no intensity
-    /// step ever reaches zero: the slider sets *how hard* to cool, this sets *whether* to. On a
+    /// step ever reaches zero: the slider sets *how hard* to cool, while desk mode reduces the
+    /// Peltier output without stopping the fan. On a
     /// 4 Pro use `getSetCoolingPowerCommand(0)` instead, and set a fan speed to keep air moving.
     ///
     /// - Parameters:
-    ///   - enabled: `true` for normal cooling, `false` to stop cooling and leave the fan on.
+    ///   - enabled: `true` for normal cooling, `false` for reduced cooling with the fan still on.
     ///   - model: The connected cooler.
     /// - Returns: The payload, or `nil` on a 4 Pro.
     public static func getSetCoolingEnabledCommand(_ enabled: Bool, model: Model = .pro4) -> Data? {
