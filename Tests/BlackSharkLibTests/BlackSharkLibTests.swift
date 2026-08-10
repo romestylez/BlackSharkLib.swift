@@ -90,9 +90,14 @@ struct FourProParseTests {
 struct FiveProParseTests {
 
     @Test(arguments: [
-        (Data([0x89, 0x06, 0x20, 0x00, 0x02, 0x32, 0x58, 0x11, 0x1c]), 2, 50, 4440, 28),
-        (Data([0x89, 0x06, 0x20, 0x00, 0x00, 0x33, 0x10, 0x0e, 0x13]), 0, 51, 3600, 19),
-        (Data([0x89, 0x06, 0x20, 0x00, 0xff, 0x33, 0x4c, 0x0e, 0x15]), -1, 51, 3660, 21),
+        // Hardware-captured with Shark Arsenal showing Custom Low.
+        (Data([0x89, 0x06, 0x20, 0x00, 0xff, 0x25, 0xe2, 0x0e, 0x08]), -1, 37, 3810, 8),
+        (Data([0x89, 0x06, 0x20, 0x00, 0xff, 0x25, 0xc4, 0x0e, 0x08]), -1, 37, 3780, 8),
+        // Hardware-captured after Custom High had stabilised.
+        (Data([0x89, 0x06, 0x20, 0x00, 0x00, 0x23, 0xbc, 0x16, 0x08]), 0, 35, 5820, 8),
+        (Data([0x89, 0x06, 0x20, 0x00, 0x00, 0x23, 0xda, 0x16, 0x08]), 0, 35, 5850, 8),
+        // Hardware-captured example confirming that the power field changes dynamically.
+        (Data([0x89, 0x06, 0x20, 0x00, 0xf7, 0x2a, 0xa6, 0x0e, 0x13]), -9, 42, 3750, 19),
     ])
     func coolingState(frame: Data, cold: Int, hot: Int, rpm: Int, power: Int) throws {
         let state = try #require(BlackSharkLib.parseMessages(frame) as? BlackSharkLib.CoolingState)
@@ -101,6 +106,7 @@ struct FiveProParseTests {
         #expect(state.heatsinkTemperature == hot)
         #expect(state.fanRPM == rpm)
         #expect(state.powerLevel == power)
+        #expect(state.devicePowerWatts == power)
         #expect(state.rawData == frame)
     }
 
@@ -116,6 +122,11 @@ struct FiveProParseTests {
         let state = try #require(BlackSharkLib.parseMessages(frame) as? BlackSharkLib.CoolingState)
         #expect(state.fanRPM == 4830)
     }
+
+    @Test func wrongTelemetryHeaderFallsThroughToUnknown() {
+        let frame = Data([0x89, 0x06, 0x21, 0x00, 0x00, 0x23, 0xbc, 0x16, 0x08])
+        #expect(BlackSharkLib.parseMessages(frame) is BlackSharkLib.UnknownMessage)
+    }
 }
 
 @Suite("parseMessages: malformed input")
@@ -126,6 +137,7 @@ struct MalformedParseTests {
             Data(),
             Data([0x8a]),
             Data([0x8a, 0x06, 0x00]),
+            Data([0x89, 0x06, 0x20]),
             Data([0x8a, 0x06, 0x00, 0x00, 0x01, 0x08, 0x00]),
             Data([0x86, 0x02, 0x10, 0x00]),
             Data([0x89, 0x06, 0x20, 0x00, 0x02, 0x32, 0x58, 0x11]),
