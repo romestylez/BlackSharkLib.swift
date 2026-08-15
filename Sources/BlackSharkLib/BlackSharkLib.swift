@@ -14,9 +14,27 @@ public class BlackSharkLib {
     }
 
     private static let serviceUUID: UUID = UUID(uuidString: "0000A0A0-3C17-D293-8E48-14FE2E4DA212")!
-    /// The GATT service to connect to. Same on both models.
+    private static let funCooler6ProServiceUUID: UUID = UUID(uuidString: "0000F530-1212-EFDE-1523-785FEABCD123")!
+    private static let funCooler6ProNotifyUUID: UUID = UUID(uuidString: "0000F531-1212-EFDE-1523-785FEABCD123")!
+    private static let funCooler6ProWriteUUID: UUID = UUID(uuidString: "0000F532-1212-EFDE-1523-785FEABCD123")!
+    /// The GATT service used by the 4 Pro, 5 Pro, regular 6 and 6 Max.
     public static func getServiceUUID() -> UUID {
         return BlackSharkLib.serviceUUID
+    }
+
+    /// Returns the full GATT service UUID for a model.
+    public static func getServiceUUID(model: Model) -> UUID {
+        return model == .funCooler6Pro ? funCooler6ProServiceUUID : serviceUUID
+    }
+
+    /// The notify characteristic used by the display-equipped FunCooler 6 Pro.
+    public static func getFunCooler6ProNotifyUUID() -> UUID {
+        return funCooler6ProNotifyUUID
+    }
+
+    /// The write-without-response characteristic used by the display-equipped FunCooler 6 Pro.
+    public static func getFunCooler6ProWriteUUID() -> UUID {
+        return funCooler6ProWriteUUID
     }
 
     /// The cooler model, which the caller detects and passes back in.
@@ -32,6 +50,10 @@ public class BlackSharkLib {
         case pro5
         /// Black Shark FunCooler 6 (BR62), not the FunCooler 6 Pro.
         case funCooler6
+        /// Black Shark FunCooler 6 Max.
+        case funCooler6Max
+        /// Display-equipped Black Shark FunCooler 6 Pro.
+        case funCooler6Pro
     }
 
     /// Cooling presets exposed by the Black Shark app for the MagCooler 4 Pro.
@@ -44,6 +66,13 @@ public class BlackSharkLib {
     /// Cooling modes supported by the regular FunCooler 6 (BR62).
     public enum FunCooler6CoolingMode: Sendable, Equatable, CaseIterable {
         case normal
+        case silent
+    }
+
+    /// Cooling presets shared by the FunCooler 6 Max and display-equipped 6 Pro.
+    public enum FunCooler6AdvancedCoolingMode: Sendable, Equatable, CaseIterable {
+        case overclocking
+        case smart
         case silent
     }
 
@@ -62,7 +91,10 @@ public class BlackSharkLib {
         if let name = advertisedName?.lowercased() {
             let compactName = name.replacingOccurrences(of: " ", with: "")
             if compactName.contains("funcooler6pro") || compactName.contains("magcooler6pro") {
-                return nil
+                return .funCooler6Pro
+            }
+            if compactName.contains("funcooler6max") || compactName.contains("magcooler6max") {
+                return .funCooler6Max
             }
             if compactName.contains("funcooler6") || compactName.contains("magcooler6") || compactName.contains("br62") {
                 return .funCooler6
@@ -118,8 +150,9 @@ public class BlackSharkLib {
     }
 
     private static let readCharacteristicsUUID   = Data([0xA0, 0x02])
-    /// The characteristic that notifies status frames. Subscribe to it and feed what
-    /// arrives to ``parseMessages(_:)``. Same on both models.
+    /// The A002 characteristic that notifies status frames on the standard transport.
+    /// Subscribe to it and feed what arrives to ``parseMessages(_:)``.
+    /// Use ``getFunCooler6ProNotifyUUID()`` for the display-equipped 6 Pro.
     public static func getReadCharacteristicsUUID() -> Data {
         // Only one known characteristic for now
         return BlackSharkLib.readCharacteristicsUUID
@@ -207,6 +240,42 @@ public class BlackSharkLib {
             )
         }
 
+        // 8B 06 - Cooling status (FunCooler 6 Max)
+        // 8B 06 20 00 <cold> <hot> <rpm-lo> <rpm-hi> <power> <unknown> <unknown>
+        if bytes.count > 3 && bytes[0] == 0x8b && bytes[1] == 0x06 && bytes[2] == 0x20 && bytes[3] == 0x00 {
+            guard bytes.count > 10 else {
+                return UnknownMessage(rawData: data)
+            }
+
+            return CoolingState(
+                rawData: data,
+                model: .funCooler6Max,
+                phoneTemperature: Int(Int8(bitPattern: bytes[4])),
+                heatsinkTemperature: Int(Int8(bitPattern: bytes[5])),
+                fanRPM: Int(bytes[6]) | (Int(bytes[7]) << 8),
+                powerLevel: Int(bytes[8])
+            )
+        }
+
+        // A5-framed cooling status (display-equipped FunCooler 6 Pro)
+        // A5 0A 05 <cold> <hot> <rpm-lo> <rpm-hi> <power> <unknown> <checksum>
+        if bytes[0] == 0xa5 && bytes[2] == 0x05 {
+            guard bytes.count == 10,
+                  Int(bytes[1]) == bytes.count,
+                  hasValidA5Checksum(bytes) else {
+                return UnknownMessage(rawData: data)
+            }
+
+            return CoolingState(
+                rawData: data,
+                model: .funCooler6Pro,
+                phoneTemperature: Int(Int8(bitPattern: bytes[3])),
+                heatsinkTemperature: Int(Int8(bitPattern: bytes[4])),
+                fanRPM: Int(bytes[5]) | (Int(bytes[6]) << 8),
+                powerLevel: Int(bytes[7])
+            )
+        }
+
         // Return generig message
         return UnknownMessage(rawData: data)
     }
@@ -216,8 +285,8 @@ public class BlackSharkLib {
     // Write
     //
     private static let writeCharacteristicsUUID  = Data([0xA0, 0x01])
-    /// The characteristic every command is written to (write-without-response).
-    /// Same on both models.
+    /// The A001 characteristic used for write-without-response commands on the standard transport.
+    /// Use ``getFunCooler6ProWriteUUID()`` for the display-equipped 6 Pro.
     public static func getWriteCharacteristicsUUID() -> Data {
         // Only one known characteristic for now
         return BlackSharkLib.writeCharacteristicsUUID
@@ -236,6 +305,10 @@ public class BlackSharkLib {
             // No FunCooler 6 telemetry frame has been verified yet. Keep the common
             // status request available so clients do not need a separate scan path.
             return Data([0x05, 0x06, 0x00, 0x00, 0x00])
+        case .funCooler6Max:
+            return Data([0x05, 0x06, 0x20, 0x00, 0x00])
+        case .funCooler6Pro:
+            return a5Frame(command: 0x05)
         }
     }
 
@@ -358,6 +431,66 @@ public class BlackSharkLib {
         return Data([0x05, 0x01, 0x00, 0x00, enabled ? 0x00 : 0x03])
     }
 
+    /// Builds a complete cooling-system command for the FunCooler 6 Max.
+    ///
+    /// Overclocking, Smart, Silent and complete cooling-off were captured and
+    /// hardware-tested. Custom mode is deliberately not exposed.
+    public static func getSetFunCooler6MaxCoolingCommand(
+        _ enabled: Bool,
+        mode: FunCooler6AdvancedCoolingMode = .smart
+    ) -> Data {
+        let value: UInt8
+        if !enabled {
+            value = 0xfb
+        } else {
+            switch mode {
+            case .overclocking:
+                value = 0x01
+            case .smart:
+                value = 0x02
+            case .silent:
+                value = 0x03
+            }
+        }
+        return Data([0x06, 0x05, 0x00, 0x00, value, 0x00])
+    }
+
+    /// Enables or disables the LEDs on the FunCooler 6 Max.
+    public static func getSetFunCooler6MaxLEDCommand(_ enabled: Bool) -> Data {
+        return Data([0x05, 0x01, 0x00, 0x00, enabled ? 0x00 : 0x03])
+    }
+
+    /// Builds an A5-framed cooling-system command for the display-equipped FunCooler 6 Pro.
+    ///
+    /// Overclocking, Smart and Silent were captured from physical hardware. The off payload
+    /// wraps the established `FB 00` complete-off value in the 6 Pro's valid A5 mode frame;
+    /// it remains experimental until a physical-device test confirms fan and Peltier stop.
+    /// Custom mode is deliberately not exposed.
+    public static func getSetFunCooler6ProCoolingCommand(
+        _ enabled: Bool,
+        mode: FunCooler6AdvancedCoolingMode = .smart
+    ) -> Data {
+        if !enabled {
+            return a5Frame(command: 0x40, payload: [0xfb, 0x00])
+        }
+
+        let value: UInt8
+        switch mode {
+        case .overclocking:
+            value = 0x00
+        case .smart:
+            value = 0x01
+        case .silent:
+            value = 0x02
+        }
+        return a5Frame(command: 0x40, payload: [value, 0x00])
+    }
+
+    /// Enables or disables the LEDs on the display-equipped FunCooler 6 Pro.
+    public static func getSetFunCooler6ProLEDCommand(_ enabled: Bool) -> Data {
+        return a5Frame(command: 0x10, payload: [enabled ? 0x00 : 0x03])
+    }
+
     /// Selects Custom mode at one of its five intensity steps.
     ///
     /// **5 Pro only.** This is that cooler's single cooling control: it has no percentage
@@ -470,6 +603,12 @@ public class BlackSharkLib {
         if model == .funCooler6 {
             return getSetFunCooler6LEDCommand(false)
         }
+        if model == .funCooler6Max {
+            return getSetFunCooler6MaxLEDCommand(false)
+        }
+        if model == .funCooler6Pro {
+            return getSetFunCooler6ProLEDCommand(false)
+        }
 
         return Data([
             0x2f, 0x01, 0x20, 0x00,
@@ -515,6 +654,19 @@ public class BlackSharkLib {
             color.red, color.green, color.blue,
             0x00, 0x00, 0x00
         ])
+    }
+
+    private static func a5Frame(command: UInt8, payload: [UInt8] = []) -> Data {
+        var bytes: [UInt8] = [0xa5, UInt8(payload.count + 4), command]
+        bytes.append(contentsOf: payload)
+        bytes.append(UInt8(bytes.reduce(0) { ($0 + Int($1)) & 0xff }))
+        return Data(bytes)
+    }
+
+    private static func hasValidA5Checksum(_ bytes: [UInt8]) -> Bool {
+        guard let checksum = bytes.last else { return false }
+        let expected = UInt8(bytes.dropLast().reduce(0) { ($0 + Int($1)) & 0xff })
+        return checksum == expected
     }
 
     struct LEDColor: Sendable, Equatable {
