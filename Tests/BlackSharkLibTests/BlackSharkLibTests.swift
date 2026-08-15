@@ -21,6 +21,17 @@ struct DeviceIdentificationTests {
     @Test func serviceUUIDIsUnchanged() {
         #expect(BlackSharkLib.getServiceUUID()
             == UUID(uuidString: "0000A0A0-3C17-D293-8E48-14FE2E4DA212")!)
+        #expect(BlackSharkLib.getServiceUUID(model: .funCooler6Max)
+            == BlackSharkLib.getServiceUUID())
+    }
+
+    @Test func displayProUsesSeparateTransport() {
+        #expect(BlackSharkLib.getServiceUUID(model: .funCooler6Pro)
+            == UUID(uuidString: "0000F530-1212-EFDE-1523-785FEABCD123")!)
+        #expect(BlackSharkLib.getFunCooler6ProNotifyUUID()
+            == UUID(uuidString: "0000F531-1212-EFDE-1523-785FEABCD123")!)
+        #expect(BlackSharkLib.getFunCooler6ProWriteUUID()
+            == UUID(uuidString: "0000F532-1212-EFDE-1523-785FEABCD123")!)
     }
 
     @Test func characteristicUUIDsAreUnchanged() {
@@ -39,6 +50,10 @@ struct ModelDetectionTests {
         #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark FunCooler 6") == .funCooler6)
         #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark Fun Cooler 6") == .funCooler6)
         #expect(BlackSharkLib.detectModel(advertisedName: "BR62") == .funCooler6)
+        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCooler 6MAX") == .funCooler6Max)
+        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark FunCooler 6 Max") == .funCooler6Max)
+        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCooler 6Pro") == .funCooler6Pro)
+        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark FunCooler 6 Pro") == .funCooler6Pro)
     }
 
     @Test func unknownOrMissingNameReturnsNil() {
@@ -46,8 +61,6 @@ struct ModelDetectionTests {
         #expect(BlackSharkLib.detectModel(advertisedName: "") == nil)
         #expect(BlackSharkLib.detectModel() == nil)
         #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCool") == nil)
-        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark MagCooler 6pro") == nil)
-        #expect(BlackSharkLib.detectModel(advertisedName: "Black Shark FunCooler 6 Pro") == nil)
     }
 }
 
@@ -125,6 +138,35 @@ struct FiveProParseTests {
 
     @Test func wrongTelemetryHeaderFallsThroughToUnknown() {
         let frame = Data([0x89, 0x06, 0x21, 0x00, 0x00, 0x23, 0xbc, 0x16, 0x08])
+        #expect(BlackSharkLib.parseMessages(frame) is BlackSharkLib.UnknownMessage)
+    }
+}
+
+@Suite("parseMessages: FunCooler 6 series")
+struct FunCooler6SeriesParseTests {
+
+    @Test func maxCoolingState() throws {
+        let frame = Data([0x8b, 0x06, 0x20, 0x00, 0x05, 0x28, 0xec, 0x13, 0x19, 0x00, 0x00])
+        let state = try #require(BlackSharkLib.parseMessages(frame) as? BlackSharkLib.CoolingState)
+        #expect(state.model == .funCooler6Max)
+        #expect(state.phoneTemperature == 5)
+        #expect(state.heatsinkTemperature == 40)
+        #expect(state.fanRPM == 5100)
+        #expect(state.devicePowerWatts == 25)
+    }
+
+    @Test func displayProCoolingState() throws {
+        let frame = Data([0xa5, 0x0a, 0x05, 0x0b, 0x34, 0x94, 0x11, 0x14, 0x0f, 0xbb])
+        let state = try #require(BlackSharkLib.parseMessages(frame) as? BlackSharkLib.CoolingState)
+        #expect(state.model == .funCooler6Pro)
+        #expect(state.phoneTemperature == 11)
+        #expect(state.heatsinkTemperature == 52)
+        #expect(state.fanRPM == 4500)
+        #expect(state.devicePowerWatts == 20)
+    }
+
+    @Test func displayProRejectsBadChecksum() {
+        let frame = Data([0xa5, 0x0a, 0x05, 0x0b, 0x34, 0x94, 0x11, 0x14, 0x0f, 0xba])
         #expect(BlackSharkLib.parseMessages(frame) is BlackSharkLib.UnknownMessage)
     }
 }
@@ -364,6 +406,58 @@ struct FunCooler6CommandTests {
     @Test func customColoursAreRejected() {
         #expect(BlackSharkLib.getSetLEDColorCommand(
             0x4d, 0xff, 0x0c, brightness: 100, model: .funCooler6) == nil)
+    }
+}
+
+@Suite("Commands: FunCooler 6 Max")
+struct FunCooler6MaxCommandTests {
+
+    @Test func coolingModesAndPowerOff() {
+        #expect(BlackSharkLib.getSetFunCooler6MaxCoolingCommand(true, mode: .overclocking)
+            == Data([0x06, 0x05, 0x00, 0x00, 0x01, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6MaxCoolingCommand(true, mode: .smart)
+            == Data([0x06, 0x05, 0x00, 0x00, 0x02, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6MaxCoolingCommand(true, mode: .silent)
+            == Data([0x06, 0x05, 0x00, 0x00, 0x03, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6MaxCoolingCommand(false)
+            == Data([0x06, 0x05, 0x00, 0x00, 0xfb, 0x00]))
+    }
+
+    @Test func metadataAndLEDCommands() {
+        #expect(BlackSharkLib.getCoolingMetadataCommand(model: .funCooler6Max)
+            == Data([0x05, 0x06, 0x20, 0x00, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6MaxLEDCommand(true)
+            == Data([0x05, 0x01, 0x00, 0x00, 0x00]))
+        #expect(BlackSharkLib.getSetFunCooler6MaxLEDCommand(false)
+            == Data([0x05, 0x01, 0x00, 0x00, 0x03]))
+        #expect(BlackSharkLib.getTurnOffLEDCommand(model: .funCooler6Max)
+            == BlackSharkLib.getSetFunCooler6MaxLEDCommand(false))
+    }
+}
+
+@Suite("Commands: display-equipped FunCooler 6 Pro")
+struct FunCooler6ProCommandTests {
+
+    @Test func coolingModesAndExperimentalPowerOff() {
+        #expect(BlackSharkLib.getSetFunCooler6ProCoolingCommand(true, mode: .overclocking)
+            == Data([0xa5, 0x06, 0x40, 0x00, 0x00, 0xeb]))
+        #expect(BlackSharkLib.getSetFunCooler6ProCoolingCommand(true, mode: .smart)
+            == Data([0xa5, 0x06, 0x40, 0x01, 0x00, 0xec]))
+        #expect(BlackSharkLib.getSetFunCooler6ProCoolingCommand(true, mode: .silent)
+            == Data([0xa5, 0x06, 0x40, 0x02, 0x00, 0xed]))
+        #expect(BlackSharkLib.getSetFunCooler6ProCoolingCommand(false)
+            == Data([0xa5, 0x06, 0x40, 0xfb, 0x00, 0xe6]))
+    }
+
+    @Test func metadataAndLEDCommands() {
+        #expect(BlackSharkLib.getCoolingMetadataCommand(model: .funCooler6Pro)
+            == Data([0xa5, 0x04, 0x05, 0xae]))
+        #expect(BlackSharkLib.getSetFunCooler6ProLEDCommand(true)
+            == Data([0xa5, 0x05, 0x10, 0x00, 0xba]))
+        #expect(BlackSharkLib.getSetFunCooler6ProLEDCommand(false)
+            == Data([0xa5, 0x05, 0x10, 0x03, 0xbd]))
+        #expect(BlackSharkLib.getTurnOffLEDCommand(model: .funCooler6Pro)
+            == BlackSharkLib.getSetFunCooler6ProLEDCommand(false))
     }
 }
 
