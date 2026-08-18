@@ -35,11 +35,12 @@ telemetry formats are documented in
 ## Implemented, hardware verification pending
 
 - Black Shark FunCooler 6 Pro (display-equipped model)
-  - Connection through its separate F530/F531/F532 GATT transport
+  - Discovery and connection through its separate F530/F531/F532 GATT transport, hardware-tested on Android
   - Overclocking, Smart and Silent cooling modes
   - LED on/off control
   - Cold-side and hot-side temperature, fan RPM and device-power telemetry
   - Experimental complete cooling-off command awaiting a physical-device test
+  - End-to-end verification of controls and telemetry is still pending
 
 ## Planned devices
 

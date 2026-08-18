@@ -45,6 +45,14 @@ The device advertises as `Black Shark MagCooler 6Pro`. Unlike the regular 6 and
 - Notify characteristic: `0000F531-1212-EFDE-1523-785FEABCD123`
 - Write-without-response characteristic: `0000F532-1212-EFDE-1523-785FEABCD123`
 
+Android discovery and connection were hardware-tested successfully on
+2026-08-18 with pocketChat. A scan filtered only by F530 and the standard Black
+Shark manufacturer block did not discover the tested device. Discovery
+succeeded after adding an unfiltered foreground fallback that accepts the
+complete local name `Black Shark MagCooler 6Pro`. BLE clients should also choose
+the Pro transport from the F530 service found during GATT service discovery;
+relying on a cached or truncated GAP name may select the wrong protocol.
+
 An A5 frame contains `A5`, the total frame length, the command and its payload,
 followed by an additive checksum of all preceding bytes modulo 256.
 
