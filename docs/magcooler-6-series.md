@@ -65,13 +65,29 @@ followed by an additive checksum of all preceding bytes modulo 256.
 | Silent | `A5 06 40 02 00 ED` | Captured from hardware |
 | LEDs on | `A5 05 10 00 BA` | Captured from hardware |
 | LEDs off | `A5 05 10 03 BD` | Captured from hardware |
-| Cooling off | `A5 06 40 FB 00 E6` | Experimental; hardware test pending |
+| Cooling off candidate | `A5 06 40 FB 00 E6` | Rejected; had no effect in a hardware test |
 
 The official app does not expose a complete cooling-off control for this model,
-so no off frame appeared in the capture. The experimental payload applies the
-`FB 00` complete-off mode used by the other current models to the valid A5 mode
-frame. It must remain marked experimental until a physical-device test confirms
-that both fan and Peltier stop.
+so no off frame appeared in either capture. Applying the `FB 00` value used by
+other current models to the A5 mode frame had no effect in a physical-device
+test and must not be treated as a supported off command.
+
+The second capture also confirmed the mode frames through telemetry. Shortly
+after each selection, Overclock reported approximately 4740 RPM / 26 W, Smart
+approximately 4320 RPM / 15 W and Silent approximately 3840 RPM / 9 W.
+
+### Custom power levels
+
+Custom uses mode `03` followed by a zero-based power level. These are all active
+cooling states; level 1 is not an off command.
+
+| Custom level | Payload | Observed fan speed |
+| --- | --- | --- |
+| 1 (Low) | `A5 06 40 03 00 EE` | approximately 3300 RPM |
+| 2 | `A5 06 40 03 01 EF` | approximately 3840 RPM |
+| 3 | `A5 06 40 03 02 F0` | approximately 4500 RPM |
+| 4 (OC) | `A5 06 40 03 03 F1` | approximately 4920 RPM |
+| 5 (High) | `A5 06 40 03 04 F2` | approximately 6000 RPM |
 
 ### Telemetry
 
