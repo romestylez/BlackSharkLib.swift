@@ -43,6 +43,7 @@ telemetry formats are documented in
 
 ## Planned devices
 
+- Black Shark FunCooler 5
 - Black Shark FunCooler 4 Pro
 - Black Shark MagCooler 3 Pro
 - Black Shark FunCooler 3 Pro
