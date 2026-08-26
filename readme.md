@@ -6,26 +6,26 @@ BlackSharkLib.swift is a Swift library that enables communication between your a
 
 ## Supported and hardware-tested
 
-- Black Shark MagCooler 4 Pro
+- **Black Shark MagCooler 4 Pro**
   - Complete cooling on/off through separate fan and Peltier controls
   - Mute, Overclocking and Smart cooling modes
   - Solid-colour, Streamer and off LED controls
-- Black Shark MagCooler 5 Pro
+- **Black Shark MagCooler 5 Pro**
   - Five cooling intensity levels
   - Complete cooling on/off control for fan and Peltier
   - Desk mode with reduced cooling and continued low fan speed
   - Solid-colour LED controls
   - Cold-side and hot-side temperature, fan RPM and device-power telemetry
-- Black Shark FunCooler 6 (BR62, regular model without display)
+- **Black Shark FunCooler 6 (BR62, regular model without display)**
   - Normal and Silent cooling modes
   - Complete cooling on/off control for fan and Peltier
   - LED on/off control
-- Black Shark FunCooler 6 Max
+- **Black Shark FunCooler 6 Max**
   - Overclocking, Smart and Silent cooling modes
   - Complete cooling on/off control for fan and Peltier
   - LED on/off control
   - Cold-side and hot-side temperature, fan RPM and device-power telemetry
-- Black Shark FunCooler 6 Pro (display-equipped model)
+- **Black Shark FunCooler 6 Pro (display-equipped model)**
   - Connection through its separate F530/F531/F532 GATT transport
   - Overclocking, Smart and Silent cooling modes
   - LED on/off control
