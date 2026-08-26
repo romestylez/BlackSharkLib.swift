@@ -7,7 +7,7 @@ BlackSharkLib.swift is a Swift library that enables communication between your a
 ## Supported and hardware-tested
 
 - Black Shark MagCooler 4 Pro
-  - Fan and Peltier power control
+  - Complete cooling on/off through separate fan and Peltier controls
   - Mute, Overclocking and Smart cooling modes
   - Solid-colour, Streamer and off LED controls
 - Black Shark FunCooler 6 (BR62, regular model without display)
@@ -16,6 +16,7 @@ BlackSharkLib.swift is a Swift library that enables communication between your a
   - LED on/off control
 - Black Shark MagCooler 5 Pro
   - Five cooling intensity levels
+  - Complete cooling on/off control for fan and Peltier
   - Desk mode with reduced cooling and continued low fan speed
   - Solid-colour LED controls
   - Cold-side and hot-side temperature, fan RPM and device-power telemetry
@@ -24,22 +25,20 @@ BlackSharkLib.swift is a Swift library that enables communication between your a
   - Complete cooling on/off control for fan and Peltier
   - LED on/off control
   - Cold-side and hot-side temperature, fan RPM and device-power telemetry
-
-The MagCooler 5 Pro telemetry protocol, including hardware-captured frames, is
-documented in [docs/magcooler-5-pro-telemetry.md](docs/magcooler-5-pro-telemetry.md).
-
-The MagCooler 6 Max and display-equipped 6 Pro transports, commands and
-telemetry formats are documented in
-[docs/magcooler-6-series.md](docs/magcooler-6-series.md).
-
-## Implemented, hardware verification pending
-
 - Black Shark FunCooler 6 Pro (display-equipped model)
   - Connection through its separate F530/F531/F532 GATT transport
   - Overclocking, Smart and Silent cooling modes
   - LED on/off control
   - Cold-side and hot-side temperature, fan RPM and device-power telemetry
-  - Experimental complete cooling-off command awaiting a physical-device test
+  - No remotely controllable complete cooling-off command is currently available
+
+The MagCooler 5 Pro control and telemetry protocol, including hardware-captured
+frames, is documented in
+[docs/magcooler-5-pro-telemetry.md](docs/magcooler-5-pro-telemetry.md).
+
+The MagCooler 6 Max and display-equipped 6 Pro transports, commands and
+telemetry formats are documented in
+[docs/magcooler-6-series.md](docs/magcooler-6-series.md).
 
 ## Planned devices
 

@@ -17,6 +17,22 @@ repository because it contains unrelated private device data.
 Write the status request to A001 and parse the notification received from A002
 with `BlackSharkLib.parseMessages(_:)`.
 
+## Cooling control
+
+The following commands were verified on the same physical device:
+
+| Action | Payload |
+| --- | --- |
+| Custom intensity 1-5 | `06 05 00 00 04 <level>` |
+| Normal cooling / leave desk mode | `05 07 00 00 00` |
+| Desk mode | `05 07 00 00 01` |
+| Complete cooling off | `06 05 00 00 FB 00` |
+
+Complete cooling off stops both the fan and the Peltier. Desk mode is a separate
+reduced-cooling state: the Peltier output is reduced while the fan continues to
+run slowly. To resume cooling after a complete stop, send the desired Custom
+intensity followed by the normal-cooling command.
+
 ## Response format
 
 The status notification is nine bytes:

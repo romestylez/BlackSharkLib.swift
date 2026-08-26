@@ -1,9 +1,10 @@
 # Black Shark MagCooler 6 series protocol
 
-The protocol details in this document were captured on 2026-08-16 from physical
-Black Shark MagCooler 6 Max and MagCooler 6 Pro devices using Shark Arsenal
-5.6.2. The original Android Bluetooth snoop logs are intentionally not stored in
-the repository because they contain unrelated device traffic.
+The protocol details in this document were captured and hardware-tested in
+August 2026 with physical Black Shark MagCooler 6 Max and MagCooler 6 Pro
+devices using Shark Arsenal 5.6.2. The original Android Bluetooth snoop logs are
+intentionally not stored in the repository because they contain unrelated device
+traffic.
 
 ## MagCooler 6 Max
 
@@ -57,13 +58,12 @@ followed by an additive checksum of all preceding bytes modulo 256.
 | Silent | `A5 06 40 02 00 ED` | Captured from hardware |
 | LEDs on | `A5 05 10 00 BA` | Captured from hardware |
 | LEDs off | `A5 05 10 03 BD` | Captured from hardware |
-| Cooling off | `A5 06 40 FB 00 E6` | Experimental; hardware test pending |
 
-The official app does not expose a complete cooling-off control for this model,
-so no off frame appeared in the capture. The experimental payload applies the
-`FB 00` complete-off mode used by the other current models to the valid A5 mode
-frame. It must remain marked experimental until a physical-device test confirms
-that both fan and Peltier stop.
+All commands listed above were verified on a physical 6 Pro. The official app
+does not expose a complete cooling-off control for this model. Hardware tests
+also confirmed that the compatibility candidate `A5 06 40 FB 00 E6` does not
+stop either the fan or the Peltier. No remotely controllable complete cooling-off
+command is currently known for the display-equipped 6 Pro.
 
 ### Telemetry
 
