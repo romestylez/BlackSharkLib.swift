@@ -46,7 +46,6 @@ telemetry formats are documented in
 - Black Shark FunCooler 3 Pro
 - Black Shark MagCooler 3 Pro
 - Black Shark FunCooler 4 Pro
-- Black Shark FunCooler 5
 
 Support for additional coolers is completely free and will remain open source. I will add the remaining devices step by step as I get access to the physical hardware and can reliably verify their protocol commands.
 
